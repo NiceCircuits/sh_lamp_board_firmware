@@ -95,8 +95,16 @@
 #define REL7_OUT_GPIO_Port GPIOB
 #define REL8_OUT_Pin GPIO_PIN_15
 #define REL8_OUT_GPIO_Port GPIOB
+#define IO_TX_Pin GPIO_PIN_6
+#define IO_TX_GPIO_Port GPIOC
+#define IO_RX_Pin GPIO_PIN_7
+#define IO_RX_GPIO_Port GPIOC
 #define DEBUG_LED_Pin GPIO_PIN_8
 #define DEBUG_LED_GPIO_Port GPIOA
+#define DEBUG_TX_Pin GPIO_PIN_9
+#define DEBUG_TX_GPIO_Port GPIOA
+#define DEBUG_RX_Pin GPIO_PIN_10
+#define DEBUG_RX_GPIO_Port GPIOA
 
 /* ########################## Assert Selection ############################## */
 /**
