@@ -57,8 +57,7 @@
 #include "cmsis_os.h"
 #include "stm32f7xx_hal.h"
 #include "tim.h"
-#include "usart.h"
-#include "stdlib.h"
+#include "debug.h"
 
 uint32_t adc_data[256];
 uint32_t adc_data2[256];
@@ -72,8 +71,7 @@ DMA_HandleTypeDef hdma_adc1;
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma);
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma);
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1,
-		uint32_t* pData2, uint32_t Length);
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1, uint32_t* pData2, uint32_t Length);
 
 void vAdcTask(void *pvParameters)
 {
@@ -81,7 +79,6 @@ void vAdcTask(void *pvParameters)
 	__HAL_ADC_ENABLE(&hadc2);
 	__HAL_ADC_ENABLE(&hadc3);
 	hadc1.Init.DMAContinuousRequests = ENABLE;
-	//hadc1.DMA_Handle->Init.Mode=DMA_CIRCULAR;
 	HAL_TIM_Base_Start(&htim3);
 	HAL_TIM_OC_Start(&htim3, TIM_CHANNEL_4);
 
@@ -89,16 +86,11 @@ void vAdcTask(void *pvParameters)
 	while (1)
 	{
 
-//		HAL_ADCEx_MultiModeStart_DMA(&hadc1,adc_data,3);
 		osDelay(1000);
-		itoa(hdma_adc1.Instance->CR, temp, 2);
-		HAL_UART_Transmit(&huart1, temp, 32, 100);
-		HAL_UART_Transmit(&huart1, (uint8_t*) "\r\n", 2, 100);
 	}
 }
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1,
-		uint32_t* pData2, uint32_t Length)
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1, uint32_t* pData2, uint32_t Length)
 {
 	__IO uint32_t counter = 0;
 
@@ -190,8 +182,7 @@ static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1,
 		}
 
 		/* Enable the DMA Stream in double buffer mode*/
-		HAL_DMAEx_MultiBufferStart_IT(hadc->DMA_Handle, (uint32_t) &ADC->CDR,
-				(uint32_t) pData1, (uint32_t) pData2, Length);
+		HAL_DMAEx_MultiBufferStart_IT(hadc->DMA_Handle, (uint32_t) &ADC->CDR, (uint32_t) pData1, (uint32_t) pData2, Length);
 
 		/* if no external trigger present enable software conversion of regular channels */
 		if ((hadc->Instance->CR2 & ADC_CR2_EXTEN) == RESET)
@@ -485,12 +476,10 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 {
 	/* Retrieve ADC handle corresponding to current DMA handle */
-	ADC_HandleTypeDef* hadc =
-			(ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
+	ADC_HandleTypeDef* hadc = (ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
 
 	/* Update state machine on conversion status if not in error state */
-	if (HAL_IS_BIT_CLR(hadc->State,
-			HAL_ADC_STATE_ERROR_INTERNAL | HAL_ADC_STATE_ERROR_DMA))
+	if (HAL_IS_BIT_CLR(hadc->State, HAL_ADC_STATE_ERROR_INTERNAL | HAL_ADC_STATE_ERROR_DMA))
 	{
 		/* Update ADC state machine */
 		SET_BIT(hadc->State, HAL_ADC_STATE_REG_EOC);
@@ -507,8 +496,7 @@ static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma)
 {
-	ADC_HandleTypeDef* hadc =
-			(ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
+	ADC_HandleTypeDef* hadc = (ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
 	hadc->State = HAL_ADC_STATE_ERROR_DMA;
 	/* Set ADC error code to DMA error */
 	hadc->ErrorCode |= HAL_ADC_ERROR_DMA;
