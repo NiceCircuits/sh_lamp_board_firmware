@@ -10,7 +10,7 @@
 #include "usart.h"
 #include "debug.h"
 
-char debug_print_buffer[DEBUG_PRINT_BUFFER_SIZE];
+static char debug_print_buffer[DEBUG_PRINT_BUFFER_SIZE];
 
 void debug_print(const char* format, ...)
 {
