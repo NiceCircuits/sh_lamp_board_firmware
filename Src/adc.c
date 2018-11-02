@@ -59,22 +59,27 @@
 #include "tim.h"
 #include "debug.h"
 
-uint32_t adc_data[256];
-uint32_t adc_data2[256];
+uint16_t adc_data1[256];
+uint16_t adc_data2[256];
 uint8_t temp[40];
 
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc1;
+QueueHandle_t ADC_queue;
+volatile uint8_t tempint;
 
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma);
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma);
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1, uint32_t* pData2, uint32_t Length);
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, uint16_t* pData2, uint32_t Length);
 
 void vAdcTask(void *pvParameters)
 {
+	uint16_t* last_data = NULL;
+	BaseType_t status;
+
 	__HAL_ADC_ENABLE(&hadc1);
 	__HAL_ADC_ENABLE(&hadc2);
 	__HAL_ADC_ENABLE(&hadc3);
@@ -82,15 +87,30 @@ void vAdcTask(void *pvParameters)
 	HAL_TIM_Base_Start(&htim3);
 	HAL_TIM_OC_Start(&htim3, TIM_CHANNEL_4);
 
-	ADC_start(&hadc1, adc_data, adc_data2, 9);
+	ADC_queue = xQueueCreate(1, sizeof(uint16_t*));
+	if (ADC_queue == NULL)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
+	ADC_start(&hadc1, adc_data1, adc_data2, 9);
 	while (1)
 	{
-
-		osDelay(1000);
+		status = xQueueReceive(ADC_queue, &last_data, 250);
+		tempint = HAL_IS_BIT_SET(hdma_adc1.Instance->CR, DMA_SxCR_CT);
+		if (status)
+		{
+			debug_print("adc: %x: ", (uint32_t)last_data);
+			for(int i=0;i<9;i++){
+				debug_print("%d ", last_data[i]);
+			}
+			debug_print("\r\n");
+			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+		}
 	}
 }
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1, uint32_t* pData2, uint32_t Length)
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, uint16_t* pData2, uint32_t Length)
 {
 	__IO uint32_t counter = 0;
 
@@ -154,9 +174,10 @@ static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint32_t* pData1, ui
 
 		/* Set the DMA transfer complete callback */
 		hadc->DMA_Handle->XferCpltCallback = ADC_conversion_complete_callback;
+		hadc->DMA_Handle->XferM1CpltCallback = ADC_conversion_complete_callback;
 
 		/* Set the DMA half transfer complete callback */
-		//hadc->DMA_Handle->XferHalfCpltCallback = ADC_MultiModeDMAHalfConvCplt;
+		//hadc->DMA_Handle->XferHalfCpltCallback = ADC_conversion_half_complete_callback;
 		/* Set the DMA error callback */
 		hadc->DMA_Handle->XferErrorCallback = ADC_conversion_error_callback;
 
@@ -341,8 +362,8 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 		hdma_adc1.Init.Direction = DMA_PERIPH_TO_MEMORY;
 		hdma_adc1.Init.PeriphInc = DMA_PINC_DISABLE;
 		hdma_adc1.Init.MemInc = DMA_MINC_ENABLE;
-		hdma_adc1.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-		hdma_adc1.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+		hdma_adc1.Init.PeriphDataAlignment = DMA_PDATAALIGN_HALFWORD;
+		hdma_adc1.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
 		hdma_adc1.Init.Mode = DMA_CIRCULAR;
 		hdma_adc1.Init.Priority = DMA_PRIORITY_HIGH;
 		hdma_adc1.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
@@ -475,6 +496,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 /* USER CODE BEGIN 1 */
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 {
+	uint16_t* data = adc_data2;
+	BaseType_t xHigherPriorityTaskWoken;
+
 	/* Retrieve ADC handle corresponding to current DMA handle */
 	ADC_HandleTypeDef* hadc = (ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
 
@@ -484,8 +508,12 @@ static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 		/* Update ADC state machine */
 		SET_BIT(hadc->State, HAL_ADC_STATE_REG_EOC);
 
-		// User code
-		HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+		if (HAL_IS_BIT_SET(hdma->Instance->CR, DMA_SxCR_CT))
+		{
+			data = adc_data1;
+		}
+		xQueueSendFromISR(ADC_queue, &data, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
 	else
 	{
@@ -494,13 +522,14 @@ static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 	}
 }
 
+
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma)
 {
 	ADC_HandleTypeDef* hadc = (ADC_HandleTypeDef*) ((DMA_HandleTypeDef*) hdma)->Parent;
 	hadc->State = HAL_ADC_STATE_ERROR_DMA;
 	/* Set ADC error code to DMA error */
 	hadc->ErrorCode |= HAL_ADC_ERROR_DMA;
-	HAL_ADC_ErrorCallback(hadc);
+	_Error_Handler(__FILE__, __LINE__);
 }
 /* USER CODE END 1 */
 
