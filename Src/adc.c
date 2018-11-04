@@ -59,16 +59,32 @@
 #include "tim.h"
 #include "debug.h"
 
-uint16_t adc_data1[256];
-uint16_t adc_data2[256];
-uint8_t temp[40];
+enum
+{
+	ADC_NUMBER_OF_CHANNELS = 4, ADC_NUMBER_OF_ADC = 3
+};
 
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc1;
+
 QueueHandle_t ADC_queue;
-volatile uint8_t tempint;
+uint16_t adc_data1[256];
+uint16_t adc_data2[256];
+uint8_t temp[40];
+
+const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS] =
+{
+{ ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_VREFINT, ADC_CHANNEL_TEMPSENSOR },
+{ ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13 },
+{ ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3 } };
+
+ ADC_HandleTypeDef* hadcs[ADC_NUMBER_OF_ADC] =
+{ &hadc1, &hadc2, &hadc3 };
+
+ ADC_TypeDef * adcs[ADC_NUMBER_OF_ADC] =
+{ ADC1, ADC2, ADC3 };
 
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma);
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma);
@@ -93,18 +109,18 @@ void vAdcTask(void *pvParameters)
 		_Error_Handler(__FILE__, __LINE__);
 	}
 
-	ADC_start(&hadc1, adc_data1, adc_data2, 9);
+	ADC_start(&hadc1, adc_data1, adc_data2, ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS);
 	while (1)
 	{
 		status = xQueueReceive(ADC_queue, &last_data, 250);
-		tempint = HAL_IS_BIT_SET(hdma_adc1.Instance->CR, DMA_SxCR_CT);
 		if (status)
 		{
-			debug_print("adc: %x: ", (uint32_t)last_data);
-			for(int i=0;i<9;i++){
-				debug_print("%d ", last_data[i]);
+			debug_print("0,%d,", last_data==adc_data1);
+			for (int i = 0; i < ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS; i++)
+			{
+				debug_print("%d,", last_data[i]);
 			}
-			debug_print("\r\n");
+			debug_print("0\r\n");
 			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 		}
 	}
@@ -219,31 +235,50 @@ static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, ui
 
 /* USER CODE END 0 */
 
-/* ADC1 init function */
-void MX_ADC1_Init(void)
+/* ADC init function */
+void ADC_Init(void)
 {
 	ADC_MultiModeTypeDef multimode;
 	ADC_ChannelConfTypeDef sConfig;
+	ADC_HandleTypeDef* hadc;
 
-	/**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-	 */
-	hadc1.Instance = ADC1;
-	hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-	hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-	hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-	hadc1.Init.ContinuousConvMode = DISABLE;
-	hadc1.Init.DiscontinuousConvMode = DISABLE;
 	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
 	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_CC4;
-	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc1.Init.NbrOfConversion = 1;
-	hadc1.Init.DMAContinuousRequests = DISABLE;
-	hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
-	if (HAL_ADC_Init(&hadc1) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
 
+	for (int adc = 0; adc < ADC_NUMBER_OF_ADC; adc++)
+	{
+		hadc =  hadcs[adc];
+		/**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+		 */
+		hadc->Instance = adcs[adc];
+		hadc->Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+		hadc->Init.Resolution = ADC_RESOLUTION_12B;
+		hadc->Init.ScanConvMode = ADC_SCAN_ENABLE;
+		hadc->Init.ContinuousConvMode = DISABLE;
+		hadc->Init.DiscontinuousConvMode = DISABLE;
+		hadc->Init.DataAlign = ADC_DATAALIGN_RIGHT;
+		hadc->Init.NbrOfConversion = ADC_NUMBER_OF_CHANNELS;
+		hadc->Init.DMAContinuousRequests = DISABLE;
+		hadc->Init.EOCSelection = ADC_EOC_SEQ_CONV;
+
+		if (HAL_ADC_Init(hadc) != HAL_OK)
+		{
+			_Error_Handler(__FILE__, __LINE__);
+		}
+
+		/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+		 */
+		for (uint_fast8_t ch = 0; ch < ADC_NUMBER_OF_CHANNELS; ch++)
+		{
+			sConfig.Channel = adc_channels[adc][ch];
+			sConfig.Rank = ch+1;
+			sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+			if (HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK)
+			{
+				_Error_Handler(__FILE__, __LINE__);
+			}
+		}
+	}
 	/**Configure the ADC multi-mode
 	 */
 	multimode.Mode = ADC_TRIPLEMODE_REGSIMULT;
@@ -251,82 +286,6 @@ void MX_ADC1_Init(void)
 	multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_5CYCLES;
 	ADC->CCR |= ADC_CCR_DDS;
 	if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
-
-	/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-	 */
-	sConfig.Channel = ADC_CHANNEL_4;
-	sConfig.Rank = ADC_REGULAR_RANK_1;
-	sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
-
-}
-/* ADC2 init function */
-void MX_ADC2_Init(void)
-{
-	ADC_ChannelConfTypeDef sConfig;
-
-	/**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-	 */
-	hadc2.Instance = ADC2;
-	hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-	hadc2.Init.Resolution = ADC_RESOLUTION_12B;
-	hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
-	hadc2.Init.ContinuousConvMode = DISABLE;
-	hadc2.Init.DiscontinuousConvMode = DISABLE;
-	hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc2.Init.NbrOfConversion = 1;
-	hadc2.Init.DMAContinuousRequests = DISABLE;
-	hadc2.Init.EOCSelection = ADC_EOC_SEQ_CONV;
-	if (HAL_ADC_Init(&hadc2) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
-
-	/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-	 */
-	sConfig.Channel = ADC_CHANNEL_11;
-	sConfig.Rank = ADC_REGULAR_RANK_1;
-	sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-	if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
-
-}
-/* ADC3 init function */
-void MX_ADC3_Init(void)
-{
-	ADC_ChannelConfTypeDef sConfig;
-
-	/**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-	 */
-	hadc3.Instance = ADC3;
-	hadc3.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-	hadc3.Init.Resolution = ADC_RESOLUTION_12B;
-	hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
-	hadc3.Init.ContinuousConvMode = DISABLE;
-	hadc3.Init.DiscontinuousConvMode = DISABLE;
-	hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc3.Init.NbrOfConversion = 1;
-	hadc3.Init.DMAContinuousRequests = DISABLE;
-	hadc3.Init.EOCSelection = ADC_EOC_SEQ_CONV;
-	if (HAL_ADC_Init(&hadc3) != HAL_OK)
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
-
-	/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-	 */
-	sConfig.Channel = ADC_CHANNEL_0;
-	sConfig.Rank = ADC_REGULAR_RANK_1;
-	sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-	if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
 	{
 		_Error_Handler(__FILE__, __LINE__);
 	}
@@ -521,7 +480,6 @@ static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 		hadc->DMA_Handle->XferErrorCallback(hdma);
 	}
 }
-
 
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma)
 {
