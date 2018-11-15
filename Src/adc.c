@@ -115,13 +115,13 @@ void vAdcTask(void *pvParameters)
 		status = xQueueReceive(ADC_queue, &last_data, 250);
 		if (status)
 		{
-			debug_print("0,%d,", last_data==adc_data1);
-			for (int i = 0; i < ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS; i++)
-			{
-				debug_print("%d,", last_data[i]);
-			}
-			debug_print("0\r\n");
-			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+//			debug_print("0,%d,", last_data==adc_data1);
+//			for (int i = 0; i < ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS; i++)
+//			{
+//				debug_print("%d,", last_data[i]);
+//			}
+//			debug_print("0\r\n");
+//			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 		}
 	}
 }
