@@ -116,7 +116,7 @@ int main(void)
 	MX_CAN1_Init();
 	MX_TIM3_Init();
 	/* USER CODE BEGIN 2 */
-
+	debug_print("hello!\r\n");
 	/* USER CODE END 2 */
 
 	/* Call init function for freertos objects (in freertos.c) */
