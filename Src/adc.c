@@ -53,7 +53,6 @@
 #include "gpio.h"
 #include "dma.h"
 
-/* USER CODE BEGIN 0 */
 #include "cmsis_os.h"
 #include "stm32f7xx_hal.h"
 #include "tim.h"
@@ -80,10 +79,10 @@ const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS] =
 { ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13 },
 { ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3 } };
 
- ADC_HandleTypeDef* hadcs[ADC_NUMBER_OF_ADC] =
+ADC_HandleTypeDef* hadcs[ADC_NUMBER_OF_ADC] =
 { &hadc1, &hadc2, &hadc3 };
 
- ADC_TypeDef * adcs[ADC_NUMBER_OF_ADC] =
+ADC_TypeDef * adcs[ADC_NUMBER_OF_ADC] =
 { ADC1, ADC2, ADC3 };
 
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma);
@@ -233,8 +232,6 @@ static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, ui
 	return HAL_OK;
 }
 
-/* USER CODE END 0 */
-
 /* ADC init function */
 void ADC_Init(void)
 {
@@ -247,7 +244,7 @@ void ADC_Init(void)
 
 	for (int adc = 0; adc < ADC_NUMBER_OF_ADC; adc++)
 	{
-		hadc =  hadcs[adc];
+		hadc = hadcs[adc];
 		/**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
 		 */
 		hadc->Instance = adcs[adc];
@@ -271,7 +268,7 @@ void ADC_Init(void)
 		for (uint_fast8_t ch = 0; ch < ADC_NUMBER_OF_CHANNELS; ch++)
 		{
 			sConfig.Channel = adc_channels[adc][ch];
-			sConfig.Rank = ch+1;
+			sConfig.Rank = ch + 1;
 			sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
 			if (HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK)
 			{
@@ -298,9 +295,6 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 	GPIO_InitTypeDef GPIO_InitStruct;
 	if (adcHandle->Instance == ADC1)
 	{
-		/* USER CODE BEGIN ADC1_MspInit 0 */
-
-		/* USER CODE END ADC1_MspInit 0 */
 		/* ADC1 clock enable */
 		__HAL_RCC_ADC1_CLK_ENABLE()
 		;
@@ -333,15 +327,9 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 
 		__HAL_LINKDMA(adcHandle, DMA_Handle, hdma_adc1);
 
-		/* USER CODE BEGIN ADC1_MspInit 1 */
-
-		/* USER CODE END ADC1_MspInit 1 */
 	}
 	else if (adcHandle->Instance == ADC2)
 	{
-		/* USER CODE BEGIN ADC2_MspInit 0 */
-
-		/* USER CODE END ADC2_MspInit 0 */
 		/* ADC2 clock enable */
 		__HAL_RCC_ADC2_CLK_ENABLE()
 		;
@@ -356,16 +344,9 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 		GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
 		GPIO_InitStruct.Pull = GPIO_NOPULL;
 		HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-		/* USER CODE BEGIN ADC2_MspInit 1 */
-
-		/* USER CODE END ADC2_MspInit 1 */
 	}
 	else if (adcHandle->Instance == ADC3)
 	{
-		/* USER CODE BEGIN ADC3_MspInit 0 */
-
-		/* USER CODE END ADC3_MspInit 0 */
 		/* ADC3 clock enable */
 		__HAL_RCC_ADC3_CLK_ENABLE()
 		;
@@ -380,10 +361,6 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
 		GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
 		GPIO_InitStruct.Pull = GPIO_NOPULL;
 		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-		/* USER CODE BEGIN ADC3_MspInit 1 */
-
-		/* USER CODE END ADC3_MspInit 1 */
 	}
 }
 
@@ -392,9 +369,6 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 
 	if (adcHandle->Instance == ADC1)
 	{
-		/* USER CODE BEGIN ADC1_MspDeInit 0 */
-
-		/* USER CODE END ADC1_MspDeInit 0 */
 		/* Peripheral clock disable */
 		__HAL_RCC_ADC1_CLK_DISABLE();
 
@@ -406,15 +380,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 
 		/* ADC1 DMA DeInit */
 		HAL_DMA_DeInit(adcHandle->DMA_Handle);
-		/* USER CODE BEGIN ADC1_MspDeInit 1 */
-
-		/* USER CODE END ADC1_MspDeInit 1 */
 	}
 	else if (adcHandle->Instance == ADC2)
 	{
-		/* USER CODE BEGIN ADC2_MspDeInit 0 */
-
-		/* USER CODE END ADC2_MspDeInit 0 */
 		/* Peripheral clock disable */
 		__HAL_RCC_ADC2_CLK_DISABLE();
 
@@ -425,16 +393,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 		 PC3     ------> ADC2_IN13
 		 */
 		HAL_GPIO_DeInit(GPIOC, LINE_IN_Pin | I1_IN_Pin | I2_IN_Pin | I3_IN_Pin);
-
-		/* USER CODE BEGIN ADC2_MspDeInit 1 */
-
-		/* USER CODE END ADC2_MspDeInit 1 */
 	}
 	else if (adcHandle->Instance == ADC3)
 	{
-		/* USER CODE BEGIN ADC3_MspDeInit 0 */
-
-		/* USER CODE END ADC3_MspDeInit 0 */
 		/* Peripheral clock disable */
 		__HAL_RCC_ADC3_CLK_DISABLE();
 
@@ -445,14 +406,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 		 PA3     ------> ADC3_IN3
 		 */
 		HAL_GPIO_DeInit(GPIOA, I4_IN_Pin | I5_IN_Pin | THERM_IN_Pin | I6_IN_Pin);
-
-		/* USER CODE BEGIN ADC3_MspDeInit 1 */
-
-		/* USER CODE END ADC3_MspDeInit 1 */
 	}
 }
 
-/* USER CODE BEGIN 1 */
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 {
 	uint16_t* data = adc_data2;
@@ -489,7 +445,6 @@ static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma)
 	hadc->ErrorCode |= HAL_ADC_ERROR_DMA;
 	_Error_Handler(__FILE__, __LINE__);
 }
-/* USER CODE END 1 */
 
 /**
  * @}

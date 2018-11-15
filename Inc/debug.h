@@ -8,8 +8,13 @@
 #ifndef DEBUG_H_
 #define DEBUG_H_
 
+/* Variable declarations ------------------------------------------------------------------*/
+/* Constants definitions ------------------------------------------------------------------*/
+enum
+{
+	DEBUG_PRINT_BUFFER_SIZE = 256
+};
+/* Function declaration ------------------------------------------------------------------*/
 void debug_print(const char* format, ...);
-
-#define DEBUG_PRINT_BUFFER_SIZE 256
 
 #endif /* DEBUG_H_ */

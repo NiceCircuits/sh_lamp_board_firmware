@@ -69,7 +69,6 @@ static StaticQueue_t CAN_RX_static_queue_buffer;
 CAN_RX_item_t CAN_RX_static_queue_data_buffer[CAN_RX_QUEUE_LENGTH];
 CAN_RX_item_t CAN_RX_item;
 
-/* USER CODE BEGIN 0 */
 void vCanTask(void *pvParameters)
 {
 	BaseType_t status;
@@ -138,7 +137,6 @@ void vCanTask(void *pvParameters)
 		}
 	}
 }
-/* USER CODE END 0 */
 
 CAN_HandleTypeDef hcan1;
 
@@ -171,9 +169,6 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
 	GPIO_InitTypeDef GPIO_InitStruct;
 	if (canHandle->Instance == CAN1)
 	{
-		/* USER CODE BEGIN CAN1_MspInit 0 */
-
-		/* USER CODE END CAN1_MspInit 0 */
 		/* CAN1 clock enable */
 		__HAL_RCC_CAN1_CLK_ENABLE()
 		;
@@ -189,12 +184,10 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
 		GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
 		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-		/* USER CODE BEGIN CAN1_MspInit 1 */
-	   /* CAN1 interrupt Init */
-	    HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 5, 0);
-	    HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
+		/* CAN1 interrupt Init */
+		HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 5, 0);
+		HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
-		/* USER CODE END CAN1_MspInit 1 */
 	}
 }
 
@@ -203,9 +196,6 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 
 	if (canHandle->Instance == CAN1)
 	{
-		/* USER CODE BEGIN CAN1_MspDeInit 0 */
-
-		/* USER CODE END CAN1_MspDeInit 0 */
 		/* Peripheral clock disable */
 		__HAL_RCC_CAN1_CLK_DISABLE();
 
@@ -215,13 +205,9 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 		 */
 		HAL_GPIO_DeInit(GPIOA, GPIO_PIN_11 | GPIO_PIN_12);
 
-		/* USER CODE BEGIN CAN1_MspDeInit 1 */
-
-		/* USER CODE END CAN1_MspDeInit 1 */
 	}
 }
 
-/* USER CODE BEGIN 1 */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
 	CAN_RX_item_t RX;
@@ -236,8 +222,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 	xQueueSendFromISR(CAN_RX_queue, &RX, &xHigherPriorityTaskWoken);
 	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
-
-/* USER CODE END 1 */
 
 /**
  * @}
