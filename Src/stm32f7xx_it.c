@@ -42,8 +42,8 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_adc1;
-
 extern TIM_HandleTypeDef htim1;
+extern CAN_HandleTypeDef hcan1;
 
 /******************************************************************************/
 /*            Cortex-M7 Processor Interruption and Exception Handlers         */ 
@@ -197,6 +197,15 @@ void DMA2_Stream0_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+void CAN1_RX0_IRQHandler(void)
+{
+  /* USER CODE BEGIN CAN1_RX0_IRQn 0 */
 
+  /* USER CODE END CAN1_RX0_IRQn 0 */
+  HAL_CAN_IRQHandler(&hcan1);
+  /* USER CODE BEGIN CAN1_RX0_IRQn 1 */
+
+  /* USER CODE END CAN1_RX0_IRQn 1 */
+}
 /* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

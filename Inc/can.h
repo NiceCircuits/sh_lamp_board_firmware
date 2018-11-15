@@ -64,7 +64,9 @@
 extern CAN_HandleTypeDef hcan1;
 
 /* USER CODE BEGIN Private defines */
-
+enum{
+	CAN_RX_QUEUE_LENGTH=4,
+};
 /* USER CODE END Private defines */
 
 extern void _Error_Handler(char *, int);

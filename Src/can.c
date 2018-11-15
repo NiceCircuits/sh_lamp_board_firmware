@@ -52,33 +52,90 @@
 #include "gpio.h"
 #include "FreeRTOS.h"
 #include "cmsis_os.h"
+#include "debug.h"
+
+typedef struct
+{
+	CAN_RxHeaderTypeDef header;
+	uint8_t data[8];
+} CAN_RX_item_t;
 
 CAN_TxHeaderTypeDef TxHeader;
-CAN_RxHeaderTypeDef RxHeader;
 uint8_t TxData[8];
-uint8_t RxData[8];
 uint32_t TxMailbox;
+
+QueueHandle_t CAN_RX_queue;
+static StaticQueue_t CAN_RX_static_queue_buffer;
+CAN_RX_item_t CAN_RX_static_queue_data_buffer[CAN_RX_QUEUE_LENGTH];
+CAN_RX_item_t CAN_RX_item;
 
 /* USER CODE BEGIN 0 */
 void vCanTask(void *pvParameters)
 {
-	HAL_CAN_Start(&hcan1);
+	BaseType_t status;
+	CAN_FilterTypeDef sFilterConfig;
+
+	CAN_RX_queue = xQueueCreateStatic(CAN_RX_QUEUE_LENGTH, sizeof(CAN_RX_item_t),
+			(uint8_t*) CAN_RX_static_queue_data_buffer, &CAN_RX_static_queue_buffer);
+
+	sFilterConfig.FilterBank = 0;
+	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	sFilterConfig.FilterIdHigh = 0x0000;
+	sFilterConfig.FilterIdLow = 0x0000;
+	sFilterConfig.FilterMaskIdHigh = 0x0000;
+	sFilterConfig.FilterMaskIdLow = 0x0000;
+	sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+	sFilterConfig.FilterActivation = ENABLE;
+	sFilterConfig.SlaveStartFilterBank = 14;
+
+	if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+	{
+		/* Filter configuration Error */
+		Error_Handler();
+	}
+
+	/*##-3- Start the CAN peripheral ###########################################*/
+	if (HAL_CAN_Start(&hcan1) != HAL_OK)
+	{
+		/* Start Error */
+		Error_Handler();
+	}
+	if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+	{
+		/* Notification Error */
+		Error_Handler();
+	}
+
+	TxHeader.StdId = 0x11;
+	TxHeader.RTR = CAN_RTR_DATA;
+	TxHeader.IDE = CAN_ID_STD;
+	TxHeader.DLC = 2;
+	TxHeader.TransmitGlobalTime = DISABLE;
+	TxData[0] = 0xCA;
+	TxData[1] = 0xFE;
 	while (1)
 	{
-		TxHeader.StdId = 0x11;
-		TxHeader.RTR = CAN_RTR_DATA;
-		TxHeader.IDE = CAN_ID_STD;
-		TxHeader.DLC = 2;
-		TxHeader.TransmitGlobalTime = DISABLE;
-		TxData[0] = 0xCA;
-		TxData[1] = 0xFE;
 
-		/* Request transmission */
-		if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+//		/* Request transmission */
+//		if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+//		{
+//			_Error_Handler(__FILE__, __LINE__);
+//		}
+//		osDelay(1000);
+
+		status = xQueueReceive(CAN_RX_queue, &CAN_RX_item, 0);
+		if (status)
 		{
-			_Error_Handler(__FILE__, __LINE__);
+			debug_print("0, 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_RX_item.header.StdId, CAN_RX_item.header.ExtId,
+					CAN_RX_item.header.IDE, CAN_RX_item.header.RTR);
+			for (int i = 0; i < CAN_RX_item.header.DLC; i++)
+			{
+				debug_print(" %lX", CAN_RX_item.data[i]);
+			}
+			debug_print("\r\n");
+			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 		}
-		osDelay(1000);
 	}
 }
 /* USER CODE END 0 */
@@ -133,6 +190,9 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
 		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 		/* USER CODE BEGIN CAN1_MspInit 1 */
+	   /* CAN1 interrupt Init */
+	    HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 5, 0);
+	    HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
 		/* USER CODE END CAN1_MspInit 1 */
 	}
@@ -162,6 +222,20 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 }
 
 /* USER CODE BEGIN 1 */
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	CAN_RX_item_t RX;
+	BaseType_t xHigherPriorityTaskWoken;
+
+	/* Get RX message */
+	if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &(RX.header), RX.data) != HAL_OK)
+	{
+		/* Reception Error */
+		Error_Handler();
+	}
+	xQueueSendFromISR(CAN_RX_queue, &RX, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
 
 /* USER CODE END 1 */
 
