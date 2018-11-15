@@ -72,7 +72,7 @@ extern void _Error_Handler(char *, int);
 void MX_CAN1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+void vCanTask(void *pvParameters);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus
