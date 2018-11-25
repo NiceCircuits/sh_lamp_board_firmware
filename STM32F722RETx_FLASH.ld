@@ -42,7 +42,10 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 256K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 512K
+FLASH_BOOT (rx)      : ORIGIN = 0x8000000, LENGTH = 30K
+FLASH_INFO (rx)      : ORIGIN = 0x8007800, LENGTH = 2K
+FLASH_DATA (rx)      : ORIGIN = 0x8008000, LENGTH = 32K
+FLASH_MAIN (rx)      : ORIGIN = 0x8010000, LENGTH = 448K
 }
 
 /* Define output sections */
@@ -54,7 +57,31 @@ SECTIONS
     . = ALIGN(4);
     KEEP(*(.isr_vector)) /* Startup code */
     . = ALIGN(4);
-  } >FLASH
+  } >FLASH_BOOT
+
+  /* info flash data (version number, device ID, etc.)*/
+  .flash_info :
+  {
+    _sflash_info = .;         /* define a global symbol at flash_info start */
+    __flash_info_start__ = _sflash_info;
+    *(.flash_info*)
+    KEEP(*(.flash_info*))
+    . = ALIGN(4);
+    _eflash_info = .;         /* define a global symbol at flash_info end */
+    __flash_info_end__ = _eflash_info;
+  } >FLASH_INFO
+
+  /* non-volatile flash data */
+  .flash_data :
+  {
+    _sflash_data = .;         /* define a global symbol at flash_data start */
+    __flash_data_start__ = _sflash_data;
+    *(.flash_data*)
+    KEEP(*(.flash_data*))
+    . = ALIGN(4);
+    _eflash_data = .;         /* define a global symbol at flash_data end */
+    __flash_data_end__ = _eflash_data;
+  } >FLASH_DATA
 
   /* The program code and other data goes into FLASH */
   .text :
@@ -71,7 +98,7 @@ SECTIONS
 
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
-  } >FLASH
+  } >FLASH_MAIN
 
   /* Constant data goes into FLASH */
   .rodata :
@@ -80,35 +107,35 @@ SECTIONS
     *(.rodata)         /* .rodata sections (constants, strings, etc.) */
     *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
     . = ALIGN(4);
-  } >FLASH
+  } >FLASH_MAIN
 
-  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) } >FLASH
+  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) } >FLASH_MAIN
   .ARM : {
     __exidx_start = .;
     *(.ARM.exidx*)
     __exidx_end = .;
-  } >FLASH
+  } >FLASH_MAIN
 
   .preinit_array     :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);
     KEEP (*(.preinit_array*))
     PROVIDE_HIDDEN (__preinit_array_end = .);
-  } >FLASH
+  } >FLASH_MAIN
   .init_array :
   {
     PROVIDE_HIDDEN (__init_array_start = .);
     KEEP (*(SORT(.init_array.*)))
     KEEP (*(.init_array*))
     PROVIDE_HIDDEN (__init_array_end = .);
-  } >FLASH
+  } >FLASH_MAIN
   .fini_array :
   {
     PROVIDE_HIDDEN (__fini_array_start = .);
     KEEP (*(SORT(.fini_array.*)))
     KEEP (*(.fini_array*))
     PROVIDE_HIDDEN (__fini_array_end = .);
-  } >FLASH
+  } >FLASH_MAIN
 
   /* used by the startup to initialize data */
   _sidata = LOADADDR(.data);
@@ -123,7 +150,7 @@ SECTIONS
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
-  } >RAM AT> FLASH
+  } >RAM AT> FLASH_MAIN
 
   
   /* Uninitialized data section */
