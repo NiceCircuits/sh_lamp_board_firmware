@@ -53,6 +53,8 @@
 #include "FreeRTOS.h"
 #include "cmsis_os.h"
 #include "debug.h"
+#include "outputs.h"
+#include "config.h"
 
 typedef struct
 {
@@ -68,6 +70,7 @@ QueueHandle_t CAN_RX_queue;
 static StaticQueue_t CAN_RX_static_queue_buffer;
 CAN_RX_item_t CAN_RX_static_queue_data_buffer[CAN_RX_QUEUE_LENGTH];
 CAN_RX_item_t CAN_RX_item;
+transistion_info_t message;
 
 void vCanTask(void *pvParameters)
 {
@@ -116,24 +119,33 @@ void vCanTask(void *pvParameters)
 	while (1)
 	{
 
-//		/* Request transmission */
+		/* Request transmission */
 //		if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
 //		{
 //			_Error_Handler(__FILE__, __LINE__);
 //		}
 //		osDelay(1000);
-
 		status = xQueueReceive(CAN_RX_queue, &CAN_RX_item, 0);
 		if (status)
 		{
-			debug_print("0, 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_RX_item.header.StdId, CAN_RX_item.header.ExtId,
+			debug_print("CAN: 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_RX_item.header.StdId, CAN_RX_item.header.ExtId,
 					CAN_RX_item.header.IDE, CAN_RX_item.header.RTR);
+			if (CAN_RX_item.header.DLC == 2)
+			{
+				message.device_id = (uint8_t) (CAN_RX_item.header.StdId);
+				message.input_id = CAN_RX_item.data[0];
+				message.messsage_type = CAN_RX_item.data[1];
+				status = xQueueSend(message_queue, &message, 0);
+				if (status != pdTRUE)
+				{
+					Error_Handler();
+				}
+			}
 			for (int i = 0; i < CAN_RX_item.header.DLC; i++)
 			{
 				debug_print(" %lX", CAN_RX_item.data[i]);
 			}
 			debug_print("\r\n");
-			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 		}
 	}
 }
