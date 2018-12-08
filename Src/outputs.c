@@ -27,7 +27,7 @@ static const uint16_t output_pins[N_OUTPUTS] =
 
 SemaphoreHandle_t outputs_sync_semaphore;
 
-QueueHandle_t message_queue;
+QueueHandle_t output_control_message_queue;
 static StaticQueue_t message_static_queue_buffer;
 transistion_info_t message_static_queue_data_buffer[MESSAGE_QUEUE_LENGTH];
 transistion_info_t message;
@@ -42,16 +42,16 @@ void vOutputsTask(void *pvParameters)
 	{
 		Error_Handler();
 	}
-	message_queue = xQueueCreateStatic(MESSAGE_QUEUE_LENGTH, sizeof(transistion_info_t),
+	output_control_message_queue = xQueueCreateStatic(MESSAGE_QUEUE_LENGTH, sizeof(transistion_info_t),
 			(uint8_t*) message_static_queue_data_buffer, &message_static_queue_buffer);
-	if (message_queue == NULL)
+	if (output_control_message_queue == NULL)
 	{
 		Error_Handler();
 	}
 	while (1)
 	{
 
-		while (xQueueReceive(message_queue, &message, 0))
+		while (xQueueReceive(output_control_message_queue, &message, 0))
 		{
 			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 			// check if state change needed

@@ -135,7 +135,7 @@ void vCanTask(void *pvParameters)
 				message.device_id = (uint8_t) (CAN_RX_item.header.StdId);
 				message.input_id = CAN_RX_item.data[0];
 				message.messsage_type = CAN_RX_item.data[1];
-				status = xQueueSend(message_queue, &message, 0);
+				status = xQueueSend(output_control_message_queue, &message, 0);
 				if (status != pdTRUE)
 				{
 					Error_Handler();

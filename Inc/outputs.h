@@ -13,7 +13,7 @@
 void vOutputsTask(void *pvParameters);
 
 extern SemaphoreHandle_t outputs_sync_semaphore;
-extern QueueHandle_t message_queue;
+extern QueueHandle_t output_control_message_queue;
 
 enum
 {
