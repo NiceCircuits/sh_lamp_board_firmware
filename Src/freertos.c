@@ -57,6 +57,7 @@
 /* Private includes ----------------------------------------------------------*/
 #include "adc.h"
 #include "can.h"
+#include "outputs.h"
 
 /* Private typedef -----------------------------------------------------------*/
 enum {
@@ -90,6 +91,7 @@ void MX_FREERTOS_Init(void) {
 	/* add threads, ... */
 	xTaskCreate(vAdcTask, "ADCTask", 512, NULL, 1, NULL);
 	xTaskCreate(vCanTask, "CANTask", 512, NULL, 1, NULL);
+	xTaskCreate(vOutputsTask, "OutTask", 512, NULL, 1, NULL);
 }
 
 /**

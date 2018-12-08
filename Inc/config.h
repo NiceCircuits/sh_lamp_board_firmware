@@ -12,7 +12,7 @@
 
 enum
 {
-	N_GROUPS = 16, N_STATES = 256, N_TRANSITIONS = 4192
+	N_GROUPS = 8, N_STATES = 256, N_TRANSITIONS = 4192, N_OUTPUTS = 8
 };
 
 typedef struct
@@ -24,16 +24,21 @@ typedef struct
 
 typedef struct
 {
+	uint16_t output_mask;
 	uint16_t state_table_index;
 } group_info_t;
 
 typedef struct
 {
+	uint16_t output_states;
 	uint16_t transition_table_index;
 } state_info_t;
 
 typedef struct
 {
+	uint8_t device_id;
+	uint8_t input_id;
+	uint8_t messsage_type;
 	uint8_t next_state;
 } transistion_info_t;
 
