@@ -55,6 +55,7 @@
 #include "debug.h"
 #include "outputs.h"
 #include "config.h"
+#include "can_protocol.h"
 
 typedef struct
 {
@@ -83,10 +84,10 @@ void vCanTask(void *pvParameters)
 	sFilterConfig.FilterBank = 0;
 	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
 	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	sFilterConfig.FilterIdHigh = 0x0000;
-	sFilterConfig.FilterIdLow = 0x0000;
-	sFilterConfig.FilterMaskIdHigh = 0x0000;
-	sFilterConfig.FilterMaskIdLow = 0x0000;
+	sFilterConfig.FilterIdHigh = (EVENT_FRAME_ID_FILTER >> 16) & 0xFFFF;
+	sFilterConfig.FilterIdLow = EVENT_FRAME_ID_FILTER & 0xFFFF;
+	sFilterConfig.FilterMaskIdHigh = (EVENT_FRAME_ID_MASK >> 16) & 0xFFFF;
+	sFilterConfig.FilterMaskIdLow = EVENT_FRAME_ID_MASK & 0xFFFF;
 	sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
 	sFilterConfig.FilterActivation = ENABLE;
 	sFilterConfig.SlaveStartFilterBank = 14;
@@ -125,6 +126,7 @@ void vCanTask(void *pvParameters)
 //			_Error_Handler(__FILE__, __LINE__);
 //		}
 //		osDelay(1000);
+		// receive new message
 		status = xQueueReceive(CAN_RX_queue, &CAN_RX_item, 0);
 		if (status)
 		{
@@ -147,6 +149,7 @@ void vCanTask(void *pvParameters)
 			}
 			debug_print("\r\n");
 		}
+		// transmit messages
 	}
 }
 
