@@ -17,4 +17,6 @@ enum
 /* Function declaration ------------------------------------------------------------------*/
 void debug_print(const char* format, ...);
 
+void vDebugTask(void *pvParameters);
+
 #endif /* DEBUG_H_ */

@@ -58,6 +58,7 @@ extern "C"
 
 #include "stm32f7xx_hal.h"
 #include "main.h"
+#include "FreeRTOS.h"
 
 /* Variable declarations ------------------------------------------------------------------*/
 extern CAN_HandleTypeDef hcan1;
@@ -66,6 +67,7 @@ extern CAN_HandleTypeDef hcan1;
 enum
 {
 	CAN_RX_QUEUE_LENGTH = 4,
+	CAN_TX_QUEUE_LENGTH = 8,
 };
 
 /* Function declaration ------------------------------------------------------------------*/
@@ -75,6 +77,8 @@ extern void _Error_Handler(char *, int);
 void MX_CAN1_Init(void);
 
 void vCanTask(void *pvParameters);
+
+BaseType_t CAN_send(uint16_t ID, uint8_t data_length, uint8_t* data);
 
 #ifdef __cplusplus
 }

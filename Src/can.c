@@ -56,21 +56,31 @@
 #include "outputs.h"
 #include "config.h"
 #include "can_protocol.h"
+#include <string.h>
 
 typedef struct
 {
 	CAN_RxHeaderTypeDef header;
 	uint8_t data[8];
-} CAN_RX_item_t;
+} CAN_RX_frame_t;
+
+typedef struct
+{
+	CAN_TxHeaderTypeDef header;
+	uint8_t data[8];
+} CAN_TX_frame_t;
 
 CAN_TxHeaderTypeDef TxHeader;
 uint8_t TxData[8];
 uint32_t TxMailbox;
 
 QueueHandle_t CAN_RX_queue;
-static StaticQueue_t CAN_RX_static_queue_buffer;
-CAN_RX_item_t CAN_RX_static_queue_data_buffer[CAN_RX_QUEUE_LENGTH];
-CAN_RX_item_t CAN_RX_item;
+QueueHandle_t CAN_TX_queue;
+static StaticQueue_t CAN_RX_static_queue_buffer, CAN_TX_static_queue_buffer;
+CAN_RX_frame_t CAN_RX_static_queue_data_buffer[CAN_RX_QUEUE_LENGTH];
+CAN_TX_frame_t CAN_TX_static_queue_data_buffer[CAN_TX_QUEUE_LENGTH];
+CAN_RX_frame_t CAN_RX_frame;
+CAN_TX_frame_t CAN_TX_frame;
 transistion_info_t message;
 
 void vCanTask(void *pvParameters)
@@ -78,9 +88,12 @@ void vCanTask(void *pvParameters)
 	BaseType_t status;
 	CAN_FilterTypeDef sFilterConfig;
 
-	CAN_RX_queue = xQueueCreateStatic(CAN_RX_QUEUE_LENGTH, sizeof(CAN_RX_item_t),
+	CAN_RX_queue = xQueueCreateStatic(CAN_RX_QUEUE_LENGTH, sizeof(CAN_RX_frame_t),
 			(uint8_t*) CAN_RX_static_queue_data_buffer, &CAN_RX_static_queue_buffer);
+	CAN_TX_queue = xQueueCreateStatic(CAN_TX_QUEUE_LENGTH, sizeof(CAN_TX_frame_t),
+			(uint8_t*) CAN_TX_static_queue_data_buffer, &CAN_TX_static_queue_buffer);
 
+	// config filtering for module
 	sFilterConfig.FilterBank = 0;
 	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
 	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
@@ -98,59 +111,81 @@ void vCanTask(void *pvParameters)
 		Error_Handler();
 	}
 
-	/*##-3- Start the CAN peripheral ###########################################*/
+	// Start the CAN peripheral
 	if (HAL_CAN_Start(&hcan1) != HAL_OK)
 	{
-		/* Start Error */
 		Error_Handler();
 	}
 	if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
 	{
-		/* Notification Error */
 		Error_Handler();
 	}
 
-	TxHeader.StdId = 0x11;
-	TxHeader.RTR = CAN_RTR_DATA;
-	TxHeader.IDE = CAN_ID_STD;
-	TxHeader.DLC = 2;
-	TxHeader.TransmitGlobalTime = DISABLE;
-	TxData[0] = 0xCA;
-	TxData[1] = 0xFE;
 	while (1)
 	{
 
-		/* Request transmission */
-//		if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
-//		{
-//			_Error_Handler(__FILE__, __LINE__);
-//		}
-//		osDelay(1000);
-		// receive new message
-		status = xQueueReceive(CAN_RX_queue, &CAN_RX_item, 0);
+		// receive new messages
+		status = xQueueReceive(CAN_RX_queue, &CAN_RX_frame, 0);
 		if (status)
 		{
-			debug_print("CAN: 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_RX_item.header.StdId, CAN_RX_item.header.ExtId,
-					CAN_RX_item.header.IDE, CAN_RX_item.header.RTR);
-			if (CAN_RX_item.header.DLC == 2)
+			debug_print("CAN recv: 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_RX_frame.header.StdId, CAN_RX_frame.header.ExtId,
+					CAN_RX_frame.header.IDE, CAN_RX_frame.header.RTR);
+			for (int i = 0; i < CAN_RX_frame.header.DLC; i++)
 			{
-				message.device_id = (uint8_t) (CAN_RX_item.header.StdId);
-				message.input_id = CAN_RX_item.data[0];
-				message.messsage_type = CAN_RX_item.data[1];
+				debug_print(" %lX", CAN_RX_frame.data[i]);
+			}
+			debug_print("\r\n");
+			if (CAN_RX_frame.header.DLC == 2)
+			{
+				message.device_id = (uint8_t) (CAN_RX_frame.header.StdId);
+				message.input_id = CAN_RX_frame.data[0];
+				message.messsage_type = CAN_RX_frame.data[1];
 				status = xQueueSend(output_control_message_queue, &message, 0);
 				if (status != pdTRUE)
 				{
 					Error_Handler();
 				}
 			}
-			for (int i = 0; i < CAN_RX_item.header.DLC; i++)
-			{
-				debug_print(" %lX", CAN_RX_item.data[i]);
-			}
-			debug_print("\r\n");
 		}
 		// transmit messages
+		if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1))
+		{
+			status = xQueueReceive(CAN_TX_queue, &CAN_TX_frame, 0);
+			if (status)
+			{
+				if (HAL_CAN_AddTxMessage(&hcan1, &(CAN_TX_frame.header), CAN_TX_frame.data, &TxMailbox) != HAL_OK)
+				{
+					Error_Handler();
+				}
+				else
+				{
+					debug_print("CAN send: 0x%lX, 0x%lX, 0x%lX, 0x%lX:", CAN_TX_frame.header.StdId, CAN_TX_frame.header.ExtId,
+							CAN_TX_frame.header.IDE, CAN_TX_frame.header.RTR);
+					for (int i = 0; i < CAN_TX_frame.header.DLC; i++)
+					{
+						debug_print(" %lX", CAN_TX_frame.data[i]);
+					}
+					debug_print("\r\n");
+
+				}
+			}
+		}
 	}
+}
+
+BaseType_t CAN_send(uint16_t ID, uint8_t data_length, uint8_t* data)
+{
+	assert_param(data_length <= 8);
+	assert_param(ID <= 0x800);
+	assert_param(data!=NULL);
+
+	CAN_TX_frame.header.IDE = 0;
+	CAN_TX_frame.header.RTR = 0;
+	CAN_TX_frame.header.ExtId = 0;
+	CAN_TX_frame.header.StdId = ID;
+	CAN_TX_frame.header.DLC = data_length;
+	memcpy(CAN_TX_frame.data, data, data_length);
+	return xQueueSend(CAN_TX_queue, &CAN_TX_frame, 0);
 }
 
 CAN_HandleTypeDef hcan1;
@@ -225,7 +260,7 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-	CAN_RX_item_t RX;
+	CAN_RX_frame_t RX;
 	BaseType_t xHigherPriorityTaskWoken;
 
 	/* Get RX message */

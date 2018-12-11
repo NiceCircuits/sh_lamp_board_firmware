@@ -53,8 +53,7 @@
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
-
-/* Private includes ----------------------------------------------------------*/
+#include "debug.h"
 #include "adc.h"
 #include "can.h"
 #include "outputs.h"
@@ -92,6 +91,7 @@ void MX_FREERTOS_Init(void) {
 	xTaskCreate(vAdcTask, "ADCTask", 512, NULL, 1, NULL);
 	xTaskCreate(vCanTask, "CANTask", 512, NULL, 1, NULL);
 	xTaskCreate(vOutputsTask, "OutTask", 512, NULL, 1, NULL);
+	xTaskCreate(vDebugTask, "DebugTask", 512, NULL, 1, NULL);
 }
 
 /**
