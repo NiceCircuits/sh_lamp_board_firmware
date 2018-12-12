@@ -57,10 +57,17 @@
 #include "stm32f7xx_hal.h"
 #include "tim.h"
 #include "debug.h"
+#include "can.h"
 
 enum
 {
-	ADC_NUMBER_OF_CHANNELS = 4, ADC_NUMBER_OF_ADC = 3
+	ADC_NUMBER_OF_CHANNELS_PER_ADC = 4,
+	ADC_NUMBER_OF_ADC = 3,
+	ADC_SAMPLES_PER_CYCLE = 10,
+	ADC_NUMBER_OF_CHANNELS = ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS_PER_ADC,
+	ADC_SAMPLE_BUFFER_LENGTH = ADC_NUMBER_OF_CHANNELS * ADC_SAMPLES_PER_CYCLE,
+	ADC_AVERAGE_COEFFICIENT = 4, // new_avg = new_sample/coeff + old_avg * (coeff-1)/coeff https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
+	ADC_ZERO_AVERAGE_COEFFICIENT = 64
 };
 
 ADC_HandleTypeDef hadc1;
@@ -69,11 +76,13 @@ ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc1;
 
 QueueHandle_t ADC_queue;
-uint16_t adc_data1[256];
-uint16_t adc_data2[256];
+uint16_t adc_data1[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
+uint16_t adc_data2[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
+int32_t adc_averaged_cycle[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
+int32_t adc_zeros[ADC_NUMBER_OF_CHANNELS];
 uint8_t temp[40];
 
-const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS] =
+const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS_PER_ADC] =
 {
 { ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_VREFINT, ADC_CHANNEL_TEMPSENSOR },
 { ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13 },
@@ -88,11 +97,11 @@ ADC_TypeDef * adcs[ADC_NUMBER_OF_ADC] =
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma);
 static void ADC_conversion_error_callback(DMA_HandleTypeDef *hdma);
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, uint16_t* pData2, uint32_t Length);
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t *pData1, uint16_t *pData2, uint32_t Length);
 
 void vAdcTask(void *pvParameters)
 {
-	uint16_t* last_data = NULL;
+	uint16_t (*last_data)[ADC_NUMBER_OF_CHANNELS] = NULL;
 	BaseType_t status;
 
 	__HAL_ADC_ENABLE(&hadc1);
@@ -108,24 +117,34 @@ void vAdcTask(void *pvParameters)
 		_Error_Handler(__FILE__, __LINE__);
 	}
 
-	ADC_start(&hadc1, adc_data1, adc_data2, ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS);
+	ADC_start(&hadc1, (uint16_t*) adc_data1, (uint16_t*) adc_data2, ADC_SAMPLE_BUFFER_LENGTH);
 	while (1)
 	{
 		status = xQueueReceive(ADC_queue, &last_data, 250);
 		if (status)
 		{
-//			debug_print("0,%d,", last_data==adc_data1);
-//			for (int i = 0; i < ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS; i++)
-//			{
-//				debug_print("%d,", last_data[i]);
-//			}
-//			debug_print("0\r\n");
+			// new ADC data
+//			CAN_send(0x101,8,last_data);
+			debug_print("ADC %d", last_data == adc_data1);
+			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+			{
+				debug_print("\r\n");
+				for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+				{
+					adc_averaged_cycle[j][i] = adc_averaged_cycle[j][i] * (ADC_AVERAGE_COEFFICIENT - 1) / ADC_AVERAGE_COEFFICIENT
+							+ last_data[j][i];
+					adc_zeros[i] = adc_zeros[i] * (ADC_ZERO_AVERAGE_COEFFICIENT - 1) / ADC_ZERO_AVERAGE_COEFFICIENT + last_data[j][i];
+					debug_print("%d,", adc_averaged_cycle[j][i]/ ADC_AVERAGE_COEFFICIENT - adc_zeros[i]/ ADC_ZERO_AVERAGE_COEFFICIENT );
+					//debug_print("%d,", last_data[j][i]);
+				}
+			}
+			debug_print("\r\n");
 //			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 		}
 	}
 }
 
-static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t* pData1, uint16_t* pData2, uint32_t Length)
+static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t *pData1, uint16_t *pData2, uint32_t Length)
 {
 	__IO uint32_t counter = 0;
 
@@ -254,7 +273,7 @@ void ADC_Init(void)
 		hadc->Init.ContinuousConvMode = DISABLE;
 		hadc->Init.DiscontinuousConvMode = DISABLE;
 		hadc->Init.DataAlign = ADC_DATAALIGN_RIGHT;
-		hadc->Init.NbrOfConversion = ADC_NUMBER_OF_CHANNELS;
+		hadc->Init.NbrOfConversion = ADC_NUMBER_OF_CHANNELS_PER_ADC;
 		hadc->Init.DMAContinuousRequests = DISABLE;
 		hadc->Init.EOCSelection = ADC_EOC_SEQ_CONV;
 
@@ -265,7 +284,7 @@ void ADC_Init(void)
 
 		/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
 		 */
-		for (uint_fast8_t ch = 0; ch < ADC_NUMBER_OF_CHANNELS; ch++)
+		for (uint_fast8_t ch = 0; ch < ADC_NUMBER_OF_CHANNELS_PER_ADC; ch++)
 		{
 			sConfig.Channel = adc_channels[adc][ch];
 			sConfig.Rank = ch + 1;
@@ -411,7 +430,7 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 
 static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 {
-	uint16_t* data = adc_data2;
+	uint16_t *data = (uint16_t *) adc_data2;
 	BaseType_t xHigherPriorityTaskWoken;
 
 	/* Retrieve ADC handle corresponding to current DMA handle */
@@ -425,7 +444,7 @@ static void ADC_conversion_complete_callback(DMA_HandleTypeDef *hdma)
 
 		if (HAL_IS_BIT_SET(hdma->Instance->CR, DMA_SxCR_CT))
 		{
-			data = adc_data1;
+			data = (uint16_t *) adc_data1;
 		}
 		xQueueSendFromISR(ADC_queue, &data, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);

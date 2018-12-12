@@ -60,7 +60,7 @@ void MX_TIM3_Init(void)
 	TIM_OC_InitTypeDef sConfigOC;
 
 	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 2499;
+	htim3.Init.Prescaler = 999;
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
 	htim3.Init.Period = 9999;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
