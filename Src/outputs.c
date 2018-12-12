@@ -34,7 +34,7 @@ SemaphoreHandle_t outputs_sync_semaphore;
 
 QueueHandle_t output_control_message_queue;
 static StaticQueue_t message_static_queue_buffer;
-transistion_info_t message_static_queue_data_buffer[MESSAGE_QUEUE_LENGTH];
+transistion_info_t message_static_queue_data_buffer[OUTPUT_CONTROL_MESSAGE_QUEUE_LENGTH];
 transistion_info_t message;
 
 void vOutputsControlTask(void *pvParameters)
@@ -47,7 +47,7 @@ void vOutputsControlTask(void *pvParameters)
 	{
 		Error_Handler();
 	}
-	output_control_message_queue = xQueueCreateStatic(MESSAGE_QUEUE_LENGTH, sizeof(transistion_info_t),
+	output_control_message_queue = xQueueCreateStatic(OUTPUT_CONTROL_MESSAGE_QUEUE_LENGTH, sizeof(transistion_info_t),
 			(uint8_t*) message_static_queue_data_buffer, &message_static_queue_buffer);
 	if (output_control_message_queue == NULL)
 	{
