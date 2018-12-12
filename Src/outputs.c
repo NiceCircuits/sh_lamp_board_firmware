@@ -13,10 +13,15 @@
 #include "config.h"
 #include "main.h"
 #include <stdbool.h>
+#include "can_protocol.h"
+#include "can.h"
 
 static uint8_t group_states[N_GROUPS];
 
-static GPIO_PinState output_states[N_OUTPUTS];
+static volatile GPIO_PinState output_states[N_OUTPUTS] =
+{ [0 ... (N_OUTPUTS - 1)]=0 };
+static GPIO_PinState output_states_last[N_OUTPUTS] =
+{ [0 ... (N_OUTPUTS - 1)]=0 };
 
 static const GPIO_TypeDef * output_ports[N_OUTPUTS] =
 { REL1_OUT_GPIO_Port, REL2_OUT_GPIO_Port, REL3_OUT_GPIO_Port, REL4_OUT_GPIO_Port, REL5_OUT_GPIO_Port,
@@ -32,7 +37,7 @@ static StaticQueue_t message_static_queue_buffer;
 transistion_info_t message_static_queue_data_buffer[MESSAGE_QUEUE_LENGTH];
 transistion_info_t message;
 
-void vOutputsTask(void *pvParameters)
+void vOutputsControlTask(void *pvParameters)
 {
 	uint16_t state_table_index, state_table_index_next, transition_table_index, transition_table_index_next;
 	const transistion_info_t *checked_message;
@@ -51,7 +56,7 @@ void vOutputsTask(void *pvParameters)
 	while (1)
 	{
 
-		while (xQueueReceive(output_control_message_queue, &message, 0))
+		while (xQueueReceive(output_control_message_queue, &message, 1000))
 		{
 			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 			// check if state change needed
@@ -77,6 +82,11 @@ void vOutputsTask(void *pvParameters)
 						{
 							// message fits transition - change state
 							group_states[i] = checked_message->next_state;
+							// send back message with output state
+							uint8_t data[2] =
+							{ EVENT_FRAME_DGROUP_NUMBER_OFFSET + i,
+									(checked_message->next_state) ? OG_MESSAGE_GROUP_IS_ON : OG_MESSAGE_GROUP_IS_OFF };
+							CAN_send(EVENT_FRAME_ID_OFFSET + info_struct.ip, 2, data);
 							// Calculate desired output states
 							for (uint8_t k = 0; k < N_OUTPUTS; k++)
 							{
@@ -99,13 +109,27 @@ void vOutputsTask(void *pvParameters)
 				}
 			}
 		}
+	}
+}
 
+void vOutputsDriveTask(void *pvParameters)
+{
+	while (1)
+	{
 		// Synchronize outputs switching with mains zero
 		xSemaphoreTake(outputs_sync_semaphore, OUTPUT_SYNCHRONIZATION_DELAY_MAX);
 		// change output states
 		for (uint8_t i = 0; i < N_OUTPUTS; i++)
 		{
-			HAL_GPIO_WritePin((GPIO_TypeDef *) output_ports[i], (uint16_t) output_pins[i], output_states[i]);
+			if (output_states[i] != output_states_last[i])
+			{
+				output_states_last[i]=output_states[i];
+				HAL_GPIO_WritePin((GPIO_TypeDef *) output_ports[i], (uint16_t) output_pins[i], output_states[i]);
+				uint8_t data[2] =
+											{ EVENT_FRAME_DOUT_NUMBER_OFFSET + i,
+													(output_states[i]) ? O_MESSAGE_OUTPUT_IS_ON : O_MESSAGE_OUTPUT_IS_OFF };
+											CAN_send(EVENT_FRAME_ID_OFFSET + info_struct.ip, 2, data);
+			}
 		}
 	}
 }

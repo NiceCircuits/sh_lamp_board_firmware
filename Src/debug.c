@@ -31,7 +31,7 @@ void vDebugTask(void *pvParameters)
 	while (1)
 	{
 		osDelay(1000);
-		CAN_send(0x100, 1, &cnt);
-		cnt++;
+//		CAN_send(0x100, 1, &cnt);
+//		cnt++;
 	}
 }

@@ -10,14 +10,15 @@
 
 #include "FreeRTOS.h"
 
-void vOutputsTask(void *pvParameters);
+void vOutputsControlTask(void *pvParameters);
+void vOutputsDriveTask(void *pvParameters);
 
 extern SemaphoreHandle_t outputs_sync_semaphore;
 extern QueueHandle_t output_control_message_queue;
 
 enum
 {
-	OUTPUT_SYNCHRONIZATION_DELAY_MAX = 100,
+	OUTPUT_SYNCHRONIZATION_DELAY_MAX = 1000,
 	MESSAGE_QUEUE_LENGTH = 128
 };
 

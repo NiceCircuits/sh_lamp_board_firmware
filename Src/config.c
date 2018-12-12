@@ -8,7 +8,7 @@
 #include "config.h"
 
 __attribute__((section(".flash_info"))) const info_struct_t info_struct =
-{ .id = 0xFF };
+{ .ip = 0x02 };
 
 __attribute__((section(".flash_data"))) const config_struct_t config_struct =
 {

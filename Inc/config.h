@@ -19,7 +19,7 @@ typedef struct
 {
 	uint32_t sw_version;
 	uint32_t hw_version;
-	uint8_t id;
+	uint8_t ip;
 } info_struct_t;
 
 typedef struct
