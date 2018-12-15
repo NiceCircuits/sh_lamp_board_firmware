@@ -49,6 +49,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "tim.h"
+#include "config.h"
 
 TIM_HandleTypeDef htim3;
 
@@ -60,9 +61,9 @@ void MX_TIM3_Init(void)
 	TIM_OC_InitTypeDef sConfigOC;
 
 	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 999;
+	htim3.Init.Prescaler = 0; // for debug, TODO: 0
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 9999;
+	htim3.Init.Period = ADC_TIMER_PERIOD;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -89,7 +90,7 @@ void MX_TIM3_Init(void)
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM2;
-	sConfigOC.Pulse = 4999;
+	sConfigOC.Pulse = ADC_TIMER_PERIOD / 2;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 	if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
@@ -138,6 +139,11 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 		/* Peripheral clock disable */
 		__HAL_RCC_TIM3_CLK_DISABLE();
 	}
+}
+
+void change_adc_timer_period(uint16_t period)
+{
+	TIM3->ARR = period;
 }
 
 /**

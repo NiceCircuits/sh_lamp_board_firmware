@@ -58,17 +58,35 @@
 #include "tim.h"
 #include "debug.h"
 #include "can.h"
+#include "config.h"
+#include <stdbool.h>
 
 enum
 {
 	ADC_NUMBER_OF_CHANNELS_PER_ADC = 4,
 	ADC_NUMBER_OF_ADC = 3,
-	ADC_SAMPLES_PER_CYCLE = 10,
 	ADC_NUMBER_OF_CHANNELS = ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS_PER_ADC,
 	ADC_SAMPLE_BUFFER_LENGTH = ADC_NUMBER_OF_CHANNELS * ADC_SAMPLES_PER_CYCLE,
-	ADC_AVERAGE_COEFFICIENT = 4, // new_avg = new_sample/coeff + old_avg * (coeff-1)/coeff https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
-	ADC_ZERO_AVERAGE_COEFFICIENT = 64
+	ADC_AVERAGE_COEFFICIENT = 2, // new_avg = new_sample/coeff + old_avg * (coeff-1)/coeff https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
+	ADC_ZERO_AVERAGE_COEFFICIENT = 64,
+	PLL_AVERAGE_COEFFICIENT = 256
 };
+
+typedef enum
+{
+	ADC_INDEX_I7,
+	ADC_INDEX_LINE,
+	ADC_INDEX_I4,
+	ADC_INDEX_I8,
+	ADC_INDEX_I1,
+	ADC_INDEX_I5,
+	ADC_INDEX_VREF,
+	ADC_INDEX_I2,
+	ADC_INDEX_THERM,
+	ADC_INDEX_TEMPSENSOR,
+	ADC_INDEX_I3,
+	ADC_INDEX_I6
+} adc_index_t;
 
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
@@ -80,6 +98,9 @@ uint16_t adc_data1[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
 uint16_t adc_data2[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
 int32_t adc_averaged_cycle[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
 int32_t adc_zeros[ADC_NUMBER_OF_CHANNELS];
+uint8_t pll_signal[ADC_SAMPLES_PER_CYCLE] =
+{ [0 ... (ADC_SAMPLES_PER_CYCLE / 2 - 1)] = 0, [(ADC_SAMPLES_PER_CYCLE / 2) ... (ADC_SAMPLES_PER_CYCLE - 1)]=1 };
+uint16_t pll_diff[ADC_SAMPLES_PER_CYCLE];
 uint8_t temp[40];
 
 const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS_PER_ADC] =
@@ -103,6 +124,10 @@ void vAdcTask(void *pvParameters)
 {
 	uint16_t (*last_data)[ADC_NUMBER_OF_CHANNELS] = NULL;
 	BaseType_t status;
+	static int32_t delta = 0;
+	int32_t delta_avg;
+	int32_t timer_period_new;
+	bool xor;
 
 	__HAL_ADC_ENABLE(&hadc1);
 	__HAL_ADC_ENABLE(&hadc2);
@@ -120,26 +145,59 @@ void vAdcTask(void *pvParameters)
 	ADC_start(&hadc1, (uint16_t*) adc_data1, (uint16_t*) adc_data2, ADC_SAMPLE_BUFFER_LENGTH);
 	while (1)
 	{
+
+		// ================================== receive new samples ==================================
 		status = xQueueReceive(ADC_queue, &last_data, 250);
 		if (status)
 		{
-			// new ADC data
-//			CAN_send(0x101,8,last_data);
-			debug_print("ADC %d", last_data == adc_data1);
+			// new ADC data available. ADC is storing new data in second buffer now
+			// ================================== average cycles ==================================
 			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
 			{
-				debug_print("\r\n");
 				for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
 				{
 					adc_averaged_cycle[j][i] = adc_averaged_cycle[j][i] * (ADC_AVERAGE_COEFFICIENT - 1) / ADC_AVERAGE_COEFFICIENT
 							+ last_data[j][i];
-					adc_zeros[i] = adc_zeros[i] * (ADC_ZERO_AVERAGE_COEFFICIENT - 1) / ADC_ZERO_AVERAGE_COEFFICIENT + last_data[j][i];
-					debug_print("%d,", adc_averaged_cycle[j][i]/ ADC_AVERAGE_COEFFICIENT - adc_zeros[i]/ ADC_ZERO_AVERAGE_COEFFICIENT );
-					//debug_print("%d,", last_data[j][i]);
+					adc_zeros[i] = adc_zeros[i] * (ADC_ZERO_AVERAGE_COEFFICIENT - 1) / ADC_ZERO_AVERAGE_COEFFICIENT
+							+ last_data[j][i];
 				}
 			}
-			debug_print("\r\n");
-//			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+			// ================================== PLL ==================================
+			delta_avg = 0;
+			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+			{
+				// exor of input signal and pll signal
+				xor = (last_data[j][ADC_INDEX_LINE] > adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT)
+						!= pll_signal[j];
+				delta = delta * (PLL_AVERAGE_COEFFICIENT - 1) / PLL_AVERAGE_COEFFICIENT
+						+ xor * UINT16_MAX / PLL_AVERAGE_COEFFICIENT;
+				if (delta > UINT16_MAX)
+				{
+					delta = UINT16_MAX;
+				}
+				if (delta < 0)
+				{
+					delta = 0;
+				}
+				pll_diff[j] = delta;
+				// mean exor per cycle
+				delta_avg += delta;
+			}
+			timer_period_new = ADC_TIMER_PERIOD_MIN
+					+ delta_avg * (ADC_TIMER_PERIOD_MAX - ADC_TIMER_PERIOD_MIN) / UINT16_MAX / ADC_SAMPLES_PER_CYCLE;
+			change_adc_timer_period(timer_period_new);
+			// ================================== debug print ==================================
+			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+			{
+				//for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+				for (int i = ADC_INDEX_LINE; i < ADC_INDEX_LINE + 1; i++)
+				{
+					debug_print("%d,",
+							adc_averaged_cycle[j][i] / ADC_AVERAGE_COEFFICIENT - adc_zeros[i] / ADC_ZERO_AVERAGE_COEFFICIENT);
+				}
+				debug_print("%d,%d,%d,", pll_signal[j], pll_diff[j],timer_period_new);
+				debug_print("\r\n");
+			}
 		}
 	}
 }

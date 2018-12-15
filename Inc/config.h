@@ -10,9 +10,22 @@
 
 #include <inttypes.h>
 
+// output configuration
 enum
 {
 	N_GROUPS = 8, N_STATES = 256, N_TRANSITIONS = 4192, N_OUTPUTS = 8
+};
+
+// ADC configuration
+enum
+{
+	F_APB1 = 100000000, // default APB1 frequency
+	F_MAINS = 50, // mains voltage frequency
+	ADC_SAMPLES_PER_CYCLE = 64, // samples per one cycle of mains
+	ADC_SAMPLERATE = F_MAINS * ADC_SAMPLES_PER_CYCLE, // ADC smple rate
+	ADC_TIMER_PERIOD = F_APB1 / ADC_SAMPLERATE - 1, // starting period of ADC clocking timer
+	ADC_TIMER_PERIOD_MIN = ADC_TIMER_PERIOD * 99 / 100, // PLL change limits
+	ADC_TIMER_PERIOD_MAX = ADC_TIMER_PERIOD * 101 / 100, // PLL change limits
 };
 
 typedef struct

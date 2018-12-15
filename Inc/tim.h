@@ -69,6 +69,8 @@ void MX_TIM3_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
+void change_adc_timer_period(uint16_t period);
+
 #ifdef __cplusplus
 }
 #endif
