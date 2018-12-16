@@ -56,12 +56,101 @@
 #include "usart.h"
 #include "gpio.h"
 #include "debug.h"
+#include <math.h>
 
 /* Private variables ---------------------------------------------------------*/
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
+
+/*
+ * ======================== square root test ========================
+ * Algorithms from:
+ * http://www.codecodex.com/wiki/Calculate_an_integer_square_root
+ */
+
+uint32_t isqrt32_1(uint32_t x)
+{
+	register uint32_t op, res, one;
+
+	op = x;
+	res = 0;
+
+	/* "one" starts at the highest power of four <= than the argument. */
+	one = 1 << 30; /* second-to-top bit set */
+	while (one > op)
+		one >>= 2;
+
+	while (one != 0)
+	{
+		if (op >= res + one)
+		{
+			op -= res + one;
+			res += one << 1;  // <-- faster than 2 * one
+		}
+		res >>= 1;
+		one >>= 2;
+	}
+	return res;
+}
+
+uint64_t isqrt64_1(uint64_t x)
+{
+	register uint64_t op, res, one;
+
+	op = x;
+	res = 0;
+
+	/* "one" starts at the highest power of four <= than the argument. */
+	one = (uint64_t) 1 << 62; /* second-to-top bit set */
+	while (one > op)
+		one >>= 2;
+
+	while (one != 0)
+	{
+		if (op >= res + one)
+		{
+			op -= res + one;
+			res += one << 1;  // <-- faster than 2 * one
+		}
+		res >>= 1;
+		one >>= 2;
+	}
+	return res;
+}
+
+uint32_t isqrt32_2(uint32_t n)
+{
+	uint32_t c = 0x8000;
+	uint32_t g = 0x8000;
+
+	for (;;)
+	{
+		if (g * g > n)
+			g ^= c;
+		c >>= 1;
+		if (c == 0)
+			return g;
+		g |= c;
+	}
+}
+
+uint64_t isqrt64_2(uint64_t n)
+{
+	uint64_t c = 0x8000;
+	uint64_t g = 0x8000;
+
+	for (;;)
+	{
+		if (g * g > n)
+			g ^= c;
+		c >>= 1;
+		if (c == 0)
+			return g;
+		g |= c;
+	}
+}
 
 /**
  * @brief  The application entry point.
@@ -87,7 +176,80 @@ int main(void)
 	MX_CAN1_Init();
 	MX_TIM3_Init();
 
-	debug_print("hello!\r\n");
+	const uint32_t step32 = 1000; // not power of two to avoid potential simplification
+	const uint64_t step64 = (uint64_t) step32 << 32;
+
+	volatile uint16_t result16;
+	volatile uint32_t result32;
+	volatile uint32_t result32_f;
+
+	uint32_t steps = UINT32_MAX / step32;
+	uint32_t time;
+
+	debug_print("\r\nCalculate mean time of %d sqrt operations\r\n", steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint32_t x = 0; x < UINT32_MAX - step32; x += step32)
+	{
+		result16 = (uint16_t) sqrtf((float) x);
+	}
+	debug_print("float sqrt 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint64_t x = 0; x < UINT64_MAX - step64; x += step64)
+	{
+		result32 = (uint32_t) sqrtf((float) x);
+	}
+	debug_print("float sqrt 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint32_t x = 0; x < UINT32_MAX - step32; x += step32)
+	{
+		result16 = (uint16_t) sqrt((double) x);
+	}
+	debug_print("double sqrt 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint64_t x = 0; x < UINT64_MAX - step64; x += step64)
+	{
+		result32 = (uint32_t) sqrt((double) x);
+	}
+	debug_print("double sqrt 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint32_t x = 0; x < UINT32_MAX - step32; x += step32)
+	{
+		result16 = (uint16_t) isqrt32_1(x);
+	}
+	debug_print("isqrt 1 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint64_t x = 0; x < UINT64_MAX - step64; x += step64)
+	{
+		result32 = (uint32_t) isqrt64_1(x);
+	}
+	debug_print("isqrt 1 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	time = HAL_GetTick();
+	for (uint32_t x = 0; x < UINT32_MAX - step32; x += step32)
+	{
+		result16 = (uint16_t) isqrt32_2(x);
+	}
+	debug_print("isqrt 2 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	HAL_Delay(1000);
+
+	// stay here
+	while (1)
+	{
+
+	}
 
 	/* Call init function for freertos objects (in freertos.c) */
 	MX_FREERTOS_Init();
@@ -218,7 +380,7 @@ void _Error_Handler(char *file, int line)
  */
 void assert_failed(uint8_t* file, uint32_t line)
 {
-	_Error_Handler((char *)file, line);
+	_Error_Handler((char *) file, line);
 }
 #endif /* USE_FULL_ASSERT */
 
