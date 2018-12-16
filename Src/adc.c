@@ -69,7 +69,8 @@ enum
 	ADC_SAMPLE_BUFFER_LENGTH = ADC_NUMBER_OF_CHANNELS * ADC_SAMPLES_PER_CYCLE,
 	ADC_AVERAGE_COEFFICIENT = 1 << 4, // TODO: 1<<6 or more // new_avg = new_sample/coeff + old_avg * (coeff-1)/coeff https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
 	ADC_ZERO_AVERAGE_COEFFICIENT = 1 << 10, // TODO: 1 << 13,
-	PLL_AVERAGE_COEFFICIENT = 1 << 10
+	PLL_AVERAGE_COEFFICIENT = 1 << 10,
+	ADC_MAX_CODE = ((1 << 12) - 1), // Maximum code read from ADC
 };
 
 typedef enum
@@ -100,7 +101,6 @@ int32_t adc_averaged_cycle[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
 uint32_t adc_zeros[ADC_NUMBER_OF_CHANNELS] =
 { [0 ... (ADC_NUMBER_OF_CHANNELS - 1)] = ADC_ZERO_AVERAGE_COEFFICIENT * (1 << 11) };
 uint32_t adc_zeros_debug[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
-volatile int32_t adc_zeros_assert = ADC_ZERO_AVERAGE_COEFFICIENT * ((1 << 12) - 1); // assert for maximum adc_zeros capacity - will throw warning if exceeded
 uint8_t pll_signal[ADC_SAMPLES_PER_CYCLE] =
 { [0 ... (ADC_SAMPLES_PER_CYCLE / 2 - 1)] = 0, [(ADC_SAMPLES_PER_CYCLE / 2) ... (ADC_SAMPLES_PER_CYCLE - 1)]=1 };
 uint16_t pll_diff[ADC_SAMPLES_PER_CYCLE];
@@ -108,6 +108,10 @@ uint8_t temp[40];
 int16_t timer_period_diff;
 uint16_t pll_locked;
 uint8_t pll_locked_arr[ADC_SAMPLES_PER_CYCLE];
+uint64_t adc_rms_accumulator[ADC_NUMBER_OF_CHANNELS];
+// ================================== asserts ==================================
+uint64_t adc_rms_accumulator_max_assert = ADC_MAX_CODE * ADC_MAX_CODE * ADC_SAMPLES_PER_CYCLE;
+int32_t adc_zeros_max_assert = ADC_ZERO_AVERAGE_COEFFICIENT * ADC_MAX_CODE; // assert for maximum adc_zeros capacity - will throw warning if exceeded
 
 const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS_PER_ADC] =
 {
@@ -137,6 +141,7 @@ void vAdcTask(void *pvParameters)
 	uint16_t pll_diff_min = UINT16_MAX;
 	uint16_t pll_diff_max = 0;
 	uint8_t pll_diff_cnt = 0;
+	int32_t temp_int32;
 
 	__HAL_ADC_ENABLE(&hadc1);
 	__HAL_ADC_ENABLE(&hadc2);
@@ -155,9 +160,9 @@ void vAdcTask(void *pvParameters)
 	while (1)
 	{
 		// ================================== receive new samples ==================================
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin,GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
 		status = xQueueReceive(ADC_queue, &last_data, 250);
-		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin,GPIO_PIN_SET);
+		HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET);
 		if (status)
 		{
 			// new ADC data available. ADC is storing new data in second buffer now
@@ -171,6 +176,15 @@ void vAdcTask(void *pvParameters)
 					adc_zeros[i] = (uint64_t) adc_zeros[i] * (ADC_ZERO_AVERAGE_COEFFICIENT - 1) / ADC_ZERO_AVERAGE_COEFFICIENT
 							+ last_data[j][i];
 					adc_zeros_debug[j][i] = adc_zeros[i];
+				}
+			}
+			// ================================== calculate RMS ==================================
+			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+			{
+				for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+				{
+					temp_int32 = last_data[j][i] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT;
+					adc_rms_accumulator[i] += (uint64_t) ((int64_t) temp_int32 * (int64_t) temp_int32);
 				}
 			}
 			// ================================== PLL ==================================
@@ -210,22 +224,19 @@ void vAdcTask(void *pvParameters)
 				change_adc_timer_period(timer_period_new);
 				timer_period_diff = timer_period_new - ADC_TIMER_PERIOD;
 			}
-			// ================================== debug print ==================================
-			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
-			{
-				//for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
-//				for (int i = ADC_INDEX_LINE; i < ADC_INDEX_LINE + 1; i++)
-//				{
-//					debug_print("%d,", last_data[j][i] - adc_zeros[i] / ADC_ZERO_AVERAGE_COEFFICIENT);
-//				}
-				debug_print_push("%d,%d,\r\n",
-						last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT, pll_locked);
-			}
-			debug_print_send();
 			// ================================== check PLL lock status ==================================
 			pll_diff_cnt++;
 			if (pll_diff_cnt >= F_MAINS)
 			{
+				// ================================== debug print ==================================
+//				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+//				{
+//					debug_print_push("%d,%d,%d,\r\n",
+//							last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT,
+//							adc_averaged_cycle[j][ADC_INDEX_LINE] / ADC_AVERAGE_COEFFICIENT
+//									- adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT, pll_locked);
+//				}
+//				debug_print_send();
 				pll_locked = (pll_diff_max - pll_diff_min) < config_struct.pll_lock_threshold;
 				pll_diff_cnt = 0;
 				pll_diff_min = UINT16_MAX;

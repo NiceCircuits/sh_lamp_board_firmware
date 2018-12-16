@@ -53,3 +53,4 @@ dkms.conf
 /Debug
 *.bak
 /*.ioc
+/Release/

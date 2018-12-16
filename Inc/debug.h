@@ -10,6 +10,8 @@
 
 /* Variable declarations ------------------------------------------------------------------*/
 /* Constants definitions ------------------------------------------------------------------*/
+#define DEBUG_ENABLE 1
+
 enum
 {
 	DEBUG_PRINT_BUFFER_SIZE = 1024

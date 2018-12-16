@@ -13,6 +13,7 @@
 #include "FreeRTOS.h"
 #include "cmsis_os.h"
 
+#if DEBUG_ENABLE
 static char debug_print_buffer[2][DEBUG_PRINT_BUFFER_SIZE];
 static char* debug_active_buffer = debug_print_buffer[0];
 static size_t debug_buffer_index = 0;
@@ -71,3 +72,27 @@ void vDebugTask(void *pvParameters)
 //		cnt++;
 	}
 }
+#else
+void debug_print(const char* format, ...)
+{
+	UNUSED(format);
+}
+
+void debug_print_push(const char* format, ...)
+{
+	UNUSED(format);
+}
+
+void debug_print_send()
+{
+
+}
+
+void vDebugTask(void *pvParameters)
+{
+	while (1)
+	{
+		osDelay(10000);
+	}
+}
+#endif

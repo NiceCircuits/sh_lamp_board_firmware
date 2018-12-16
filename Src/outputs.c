@@ -58,7 +58,7 @@ void vOutputsControlTask(void *pvParameters)
 
 		while (xQueueReceive(output_control_message_queue, &message, 1000))
 		{
-			HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
+			//HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
 			// check if state change needed
 			for (uint8_t i = 0; i < N_GROUPS; i++)
 			{
