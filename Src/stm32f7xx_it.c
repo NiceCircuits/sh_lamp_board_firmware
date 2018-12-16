@@ -40,6 +40,8 @@
 extern DMA_HandleTypeDef hdma_adc1;
 extern TIM_HandleTypeDef htim1;
 extern CAN_HandleTypeDef hcan1;
+extern DMA_HandleTypeDef hdma_usart1_tx;
+extern UART_HandleTypeDef huart1;
 
 /******************************************************************************/
 /*            Cortex-M7 Processor Interruption and Exception Handlers         */
@@ -128,6 +130,14 @@ void TIM1_UP_TIM10_IRQHandler(void)
 void DMA2_Stream0_IRQHandler(void)
 {
 	HAL_DMA_IRQHandler(&hdma_adc1);
+}
+
+/**
+* @brief This function handles DMA2 stream7 global interrupt.
+*/
+void DMA2_Stream7_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&hdma_usart1_tx);
 }
 
 void CAN1_RX0_IRQHandler(void)
