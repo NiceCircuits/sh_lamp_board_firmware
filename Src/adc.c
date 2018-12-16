@@ -60,6 +60,7 @@
 #include "can.h"
 #include "config.h"
 #include <stdbool.h>
+#include <math.h>
 
 enum
 {
@@ -109,6 +110,7 @@ int16_t timer_period_diff;
 uint16_t pll_locked;
 uint8_t pll_locked_arr[ADC_SAMPLES_PER_CYCLE];
 uint64_t adc_rms_accumulator[ADC_NUMBER_OF_CHANNELS];
+uint16_t adc_rms[ADC_NUMBER_OF_CHANNELS];
 // ================================== asserts ==================================
 uint64_t adc_rms_accumulator_max_assert = ADC_MAX_CODE * ADC_MAX_CODE * ADC_SAMPLES_PER_CYCLE;
 int32_t adc_zeros_max_assert = ADC_ZERO_AVERAGE_COEFFICIENT * ADC_MAX_CODE; // assert for maximum adc_zeros capacity - will throw warning if exceeded
@@ -179,13 +181,15 @@ void vAdcTask(void *pvParameters)
 				}
 			}
 			// ================================== calculate RMS ==================================
-			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+			for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
 			{
-				for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+				adc_rms_accumulator[i] = 0;
+				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
 				{
 					temp_int32 = last_data[j][i] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT;
 					adc_rms_accumulator[i] += (uint64_t) ((int64_t) temp_int32 * (int64_t) temp_int32);
 				}
+				adc_rms[i] = (uint16_t) ((uint32_t) sqrtf((float) adc_rms_accumulator[i]/ADC_SAMPLES_PER_CYCLE));
 			}
 			// ================================== PLL ==================================
 			delta_avg = 0;
@@ -229,14 +233,13 @@ void vAdcTask(void *pvParameters)
 			if (pll_diff_cnt >= F_MAINS)
 			{
 				// ================================== debug print ==================================
-//				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
-//				{
-//					debug_print_push("%d,%d,%d,\r\n",
-//							last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT,
-//							adc_averaged_cycle[j][ADC_INDEX_LINE] / ADC_AVERAGE_COEFFICIENT
-//									- adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT, pll_locked);
-//				}
-//				debug_print_send();
+				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+				{
+					debug_print_push("%d,%d,\r\n",
+							last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT,
+							adc_rms[ADC_INDEX_LINE]);
+				}
+				debug_print_send();
 				pll_locked = (pll_diff_max - pll_diff_min) < config_struct.pll_lock_threshold;
 				pll_diff_cnt = 0;
 				pll_diff_min = UINT16_MAX;
