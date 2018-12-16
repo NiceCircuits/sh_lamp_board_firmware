@@ -194,7 +194,7 @@ int main(void)
 	{
 		result16 = (uint16_t) sqrtf((float) x);
 	}
-	debug_print("float sqrt 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("float sqrt 32: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -202,7 +202,7 @@ int main(void)
 	{
 		result32 = (uint32_t) sqrtf((float) x);
 	}
-	debug_print("float sqrt 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("float sqrt 64: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -210,7 +210,7 @@ int main(void)
 	{
 		result16 = (uint16_t) sqrt((double) x);
 	}
-	debug_print("double sqrt 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("double sqrt 32: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -218,7 +218,7 @@ int main(void)
 	{
 		result32 = (uint32_t) sqrt((double) x);
 	}
-	debug_print("double sqrt 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("double sqrt 64: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -226,7 +226,7 @@ int main(void)
 	{
 		result16 = (uint16_t) isqrt32_1(x);
 	}
-	debug_print("isqrt 1 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("isqrt 1 32: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -234,7 +234,7 @@ int main(void)
 	{
 		result32 = (uint32_t) isqrt64_1(x);
 	}
-	debug_print("isqrt 1 64: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("isqrt 1 64: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	time = HAL_GetTick();
@@ -242,7 +242,7 @@ int main(void)
 	{
 		result16 = (uint16_t) isqrt32_2(x);
 	}
-	debug_print("isqrt 2 32: %d cycles\r\n", (HAL_GetTick() - time) * 200 * 1000 / steps);
+	debug_print("isqrt 2 32: %d cycles\r\n", (uint32_t)((uint64_t)(HAL_GetTick() - time) * 200 * 1000 / steps));
 	HAL_Delay(1000);
 
 	// stay here
