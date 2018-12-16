@@ -59,6 +59,7 @@ __attribute__((section(".flash_data"))) const config_struct_t config_struct =
 			{1, 7, 1, 1},
 			{1, 7, 1, 0},
 			[16 ... (N_TRANSITIONS - 1)] = {0xFF, 0xFF, 0xFF, 0xFF}
-	}
+	},
+	.pll_lock_threshold = 3000
 };
 

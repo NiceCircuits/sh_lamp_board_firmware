@@ -9,6 +9,7 @@
 #define CONFIG_H_
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 // output configuration
 enum
@@ -26,6 +27,7 @@ enum
 	ADC_TIMER_PERIOD = F_APB1 / ADC_SAMPLERATE - 1, // starting period of ADC clocking timer
 	ADC_TIMER_PERIOD_MIN = ADC_TIMER_PERIOD * 99 / 100, // PLL change limits
 	ADC_TIMER_PERIOD_MAX = ADC_TIMER_PERIOD * 101 / 100, // PLL change limits
+	PLL_ON = true, // turn PLL on/off (for debug purposes)
 };
 
 typedef struct
@@ -60,6 +62,7 @@ typedef struct
 	group_info_t group_table[N_GROUPS];
 	state_info_t state_table[N_STATES];
 	transistion_info_t transition_table[N_TRANSITIONS];
+	uint16_t pll_lock_threshold;
 } config_struct_t;
 
 extern const config_struct_t config_struct;
