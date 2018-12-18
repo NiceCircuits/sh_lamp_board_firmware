@@ -12,6 +12,8 @@
 #include "can.h"
 #include "FreeRTOS.h"
 #include "cmsis_os.h"
+#include "outputs.h"
+#include "config.h"
 
 #if DEBUG_ENABLE
 static char debug_print_buffer[2][DEBUG_PRINT_BUFFER_SIZE];
@@ -59,15 +61,21 @@ void debug_print_send()
 	{
 		debug_active_buffer = debug_print_buffer[0];
 	}
-	debug_buffer_index=0;
+	debug_buffer_index = 0;
 }
+
+transistion_info_t message;
 
 void vDebugTask(void *pvParameters)
 {
 	uint8_t cnt = 0;
 	while (1)
 	{
-		osDelay(1000);
+		osDelay(5000);
+		message.device_id = (uint8_t) (1);
+		message.input_id = 7;
+		message.messsage_type = !message.messsage_type;
+		xQueueSend(output_control_message_queue, &message, 0);
 //		CAN_send(0x100, 1, &cnt);
 //		cnt++;
 	}

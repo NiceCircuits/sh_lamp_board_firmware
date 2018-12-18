@@ -64,14 +64,15 @@
 
 enum
 {
-	ADC_NUMBER_OF_CHANNELS_PER_ADC = 4,
+	ADC_N_CHANNELS_PER_ADC = 4,
 	ADC_NUMBER_OF_ADC = 3,
-	ADC_NUMBER_OF_CHANNELS = ADC_NUMBER_OF_ADC * ADC_NUMBER_OF_CHANNELS_PER_ADC,
-	ADC_SAMPLE_BUFFER_LENGTH = ADC_NUMBER_OF_CHANNELS * ADC_SAMPLES_PER_CYCLE,
+	ADC_N_CHANNELS = ADC_NUMBER_OF_ADC * ADC_N_CHANNELS_PER_ADC,
+	ADC_SAMPLE_BUFFER_LENGTH = ADC_N_CHANNELS * ADC_SAMPLES_PER_CYCLE,
 	ADC_AVERAGE_COEFFICIENT = 1 << 4, // TODO: 1<<6 or more // new_avg = new_sample/coeff + old_avg * (coeff-1)/coeff https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
 	ADC_ZERO_AVERAGE_COEFFICIENT = 1 << 10, // TODO: 1 << 13,
 	PLL_AVERAGE_COEFFICIENT = 1 << 10,
 	ADC_MAX_CODE = ((1 << 12) - 1), // Maximum code read from ADC
+	ADC_N_I_CHANNELS = 8, // Number of current measuring channels
 };
 
 typedef enum
@@ -90,18 +91,21 @@ typedef enum
 	ADC_INDEX_I6
 } adc_index_t;
 
+const adc_index_t ADC_I_CHANNELS[ADC_N_I_CHANNELS] =
+{ ADC_INDEX_I1, ADC_INDEX_I2, ADC_INDEX_I3, ADC_INDEX_I4, ADC_INDEX_I5, ADC_INDEX_I6, ADC_INDEX_I7, ADC_INDEX_I8 };
+
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc1;
 
 QueueHandle_t ADC_queue;
-uint16_t adc_data1[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
-uint16_t adc_data2[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
-int32_t adc_averaged_cycle[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
-uint32_t adc_zeros[ADC_NUMBER_OF_CHANNELS] =
-{ [0 ... (ADC_NUMBER_OF_CHANNELS - 1)] = ADC_ZERO_AVERAGE_COEFFICIENT * (1 << 11) };
-uint32_t adc_zeros_debug[ADC_SAMPLES_PER_CYCLE][ADC_NUMBER_OF_CHANNELS];
+uint16_t adc_data1[ADC_SAMPLES_PER_CYCLE][ADC_N_CHANNELS];
+uint16_t adc_data2[ADC_SAMPLES_PER_CYCLE][ADC_N_CHANNELS];
+int32_t adc_averaged_cycle[ADC_SAMPLES_PER_CYCLE][ADC_N_CHANNELS];
+uint32_t adc_zeros[ADC_N_CHANNELS] =
+{ [0 ... (ADC_N_CHANNELS - 1)] = ADC_ZERO_AVERAGE_COEFFICIENT * (1 << 11) };
+uint32_t adc_zeros_debug[ADC_SAMPLES_PER_CYCLE][ADC_N_CHANNELS];
 uint8_t pll_signal[ADC_SAMPLES_PER_CYCLE] =
 { [0 ... (ADC_SAMPLES_PER_CYCLE / 2 - 1)] = 0, [(ADC_SAMPLES_PER_CYCLE / 2) ... (ADC_SAMPLES_PER_CYCLE - 1)]=1 };
 uint16_t pll_diff[ADC_SAMPLES_PER_CYCLE];
@@ -109,13 +113,15 @@ uint8_t temp[40];
 int16_t timer_period_diff;
 uint16_t pll_locked;
 uint8_t pll_locked_arr[ADC_SAMPLES_PER_CYCLE];
-uint64_t adc_rms_accumulator[ADC_NUMBER_OF_CHANNELS];
-uint16_t adc_rms[ADC_NUMBER_OF_CHANNELS];
+uint64_t adc_rms_accumulator[ADC_N_CHANNELS];
+int64_t adc_active_power_accumulator[ADC_N_I_CHANNELS];
+uint16_t adc_rms[ADC_N_CHANNELS];
+int32_t adc_active_power[ADC_N_I_CHANNELS];
 // ================================== asserts ==================================
-uint64_t adc_rms_accumulator_max_assert = ADC_MAX_CODE * ADC_MAX_CODE * ADC_SAMPLES_PER_CYCLE;
+int64_t adc_rms_accumulator_max_assert = ADC_MAX_CODE * ADC_MAX_CODE * ADC_SAMPLES_PER_CYCLE;
 int32_t adc_zeros_max_assert = ADC_ZERO_AVERAGE_COEFFICIENT * ADC_MAX_CODE; // assert for maximum adc_zeros capacity - will throw warning if exceeded
 
-const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_NUMBER_OF_CHANNELS_PER_ADC] =
+const uint32_t adc_channels[ADC_NUMBER_OF_ADC][ADC_N_CHANNELS_PER_ADC] =
 {
 { ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_VREFINT, ADC_CHANNEL_TEMPSENSOR },
 { ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13 },
@@ -134,7 +140,7 @@ static HAL_StatusTypeDef ADC_start(ADC_HandleTypeDef* hadc, uint16_t *pData1, ui
 
 void vAdcTask(void *pvParameters)
 {
-	uint16_t (*last_data)[ADC_NUMBER_OF_CHANNELS] = NULL;
+	uint16_t (*last_data)[ADC_N_CHANNELS] = NULL;
 	BaseType_t status;
 	static int32_t delta = 0;
 	int32_t delta_avg;
@@ -143,7 +149,7 @@ void vAdcTask(void *pvParameters)
 	uint16_t pll_diff_min = UINT16_MAX;
 	uint16_t pll_diff_max = 0;
 	uint8_t pll_diff_cnt = 0;
-	int32_t temp_int32;
+	int32_t temp_int32, temp2_int32;
 
 	__HAL_ADC_ENABLE(&hadc1);
 	__HAL_ADC_ENABLE(&hadc2);
@@ -171,7 +177,7 @@ void vAdcTask(void *pvParameters)
 			// ================================== average cycles ==================================
 			for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
 			{
-				for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+				for (int i = 0; i < ADC_N_CHANNELS; i++)
 				{
 					adc_averaged_cycle[j][i] = (uint64_t) adc_averaged_cycle[j][i] * (ADC_AVERAGE_COEFFICIENT - 1)
 							/ ADC_AVERAGE_COEFFICIENT + last_data[j][i];
@@ -180,16 +186,28 @@ void vAdcTask(void *pvParameters)
 					adc_zeros_debug[j][i] = adc_zeros[i];
 				}
 			}
-			// ================================== calculate RMS ==================================
-			for (int i = 0; i < ADC_NUMBER_OF_CHANNELS; i++)
+			// ================================== calculate RMS voltage/current ==================================
+			for (int i = 0; i < ADC_N_CHANNELS; i++)
 			{
 				adc_rms_accumulator[i] = 0;
 				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
 				{
-					temp_int32 = last_data[j][i] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT;
+					temp_int32 = last_data[j][i] - adc_zeros[i] / ADC_ZERO_AVERAGE_COEFFICIENT;
 					adc_rms_accumulator[i] += (uint64_t) ((int64_t) temp_int32 * (int64_t) temp_int32);
 				}
-				adc_rms[i] = (uint16_t) ((uint32_t) sqrtf((float) adc_rms_accumulator[i]/ADC_SAMPLES_PER_CYCLE));
+				adc_rms[i] = (uint16_t) ((uint32_t) sqrtf((float) adc_rms_accumulator[i] / ADC_SAMPLES_PER_CYCLE));
+			}
+			// ================================== calculate active power ==================================
+			for (int i = 0; i < ADC_N_I_CHANNELS; i++)
+			{
+				adc_active_power_accumulator[i] = 0;
+				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
+				{
+					adc_active_power_accumulator[i] += ( ((int64_t)last_data[j][ADC_I_CHANNELS[i]]
+							- adc_zeros[ADC_I_CHANNELS[i]] / ADC_ZERO_AVERAGE_COEFFICIENT)
+							*  ((int64_t)last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT));
+				}
+				adc_active_power[i] = (int32_t) (adc_active_power_accumulator[i] / ADC_SAMPLES_PER_CYCLE);
 			}
 			// ================================== PLL ==================================
 			delta_avg = 0;
@@ -235,9 +253,11 @@ void vAdcTask(void *pvParameters)
 				// ================================== debug print ==================================
 				for (int j = 0; j < ADC_SAMPLES_PER_CYCLE; j++)
 				{
-					debug_print_push("%d,%d,\r\n",
+					debug_print_push("%d,%d,%d,\r\n",
 							last_data[j][ADC_INDEX_LINE] - adc_zeros[ADC_INDEX_LINE] / ADC_ZERO_AVERAGE_COEFFICIENT,
-							adc_rms[ADC_INDEX_LINE]);
+							last_data[j][ADC_INDEX_I8] - adc_zeros[ADC_INDEX_I8] / ADC_ZERO_AVERAGE_COEFFICIENT,
+							//adc_rms[ADC_INDEX_LINE], adc_rms[ADC_INDEX_I8],
+							adc_active_power[7]);
 				}
 				debug_print_send();
 				pll_locked = (pll_diff_max - pll_diff_min) < config_struct.pll_lock_threshold;
@@ -379,7 +399,7 @@ void ADC_Init(void)
 		hadc->Init.ContinuousConvMode = DISABLE;
 		hadc->Init.DiscontinuousConvMode = DISABLE;
 		hadc->Init.DataAlign = ADC_DATAALIGN_RIGHT;
-		hadc->Init.NbrOfConversion = ADC_NUMBER_OF_CHANNELS_PER_ADC;
+		hadc->Init.NbrOfConversion = ADC_N_CHANNELS_PER_ADC;
 		hadc->Init.DMAContinuousRequests = DISABLE;
 		hadc->Init.EOCSelection = ADC_EOC_SEQ_CONV;
 
@@ -390,7 +410,7 @@ void ADC_Init(void)
 
 		/**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
 		 */
-		for (uint_fast8_t ch = 0; ch < ADC_NUMBER_OF_CHANNELS_PER_ADC; ch++)
+		for (uint_fast8_t ch = 0; ch < ADC_N_CHANNELS_PER_ADC; ch++)
 		{
 			sConfig.Channel = adc_channels[adc][ch];
 			sConfig.Rank = ch + 1;
